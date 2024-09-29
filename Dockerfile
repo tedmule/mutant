@@ -1,8 +1,4 @@
-# Build with the golang image
-FROM golang:1.15-alpine AS build
-
-# Add git
-RUN apk add git
+FROM golang:1.23.0-alpine AS build
 
 # Set workdir
 WORKDIR /work
@@ -10,13 +6,14 @@ WORKDIR /work
 # Add dependencies
 COPY go.mod .
 COPY go.sum .
-RUN go mod download
+RUN go env -w GOPROXY=https://goproxy.cn,direct && \
+    go mod download
 
 # Build
 COPY . .
-RUN CGO_ENABLED=0 go build -o mutant
+RUN CGO_ENABLED=0 go build -o mt
 
 # Generate final image
 FROM scratch
-COPY --from=build /work/mutant /mutant
-ENTRYPOINT [ "/mutant" ]
+COPY --from=build /work/mt /mt
+ENTRYPOINT [ "/mt" ]

@@ -10,10 +10,9 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-var mutantConfig MutantConfig
 
 type Mutant interface {
 	Mutate(request v1.AdmissionRequest, storageclass string) (v1.AdmissionResponse, error)
@@ -47,6 +46,7 @@ func (m *MutantWebhook) mutateHandler(c echo.Context) error {
 		return c.String(http.StatusUnsupportedMediaType, "support application/json only")
 	}
 
+	// Set basic info(workaround, optimize later)
 	reviewResponse := v1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AdmissionReview",
@@ -66,15 +66,31 @@ func (m *MutantWebhook) mutateHandler(c echo.Context) error {
 	}
 
 	uid := admissionReview.Request.UID
-	log.Infof("======  Receive mutating request: %s\n", uid)
+	log.Infof("====== Receive mutating request: %s\n", uid)
 	log.Debugf("%s\n", PrettyJson(admissionReview))
 
 	// Allowed by default
 	defaultResponse := &v1.AdmissionResponse{
-		UID:     admissionReview.Request.UID,
+		UID:     uid,
 		Allowed: true,
 	}
+	// SET DEFAULT RESPONSE(allowed)
+	reviewResponse.Response = defaultResponse
 
+	// Find annotation: mutant=no, skip mutation
+	// Decode the PVC object
+	var pvc corev1.PersistentVolumeClaim
+	if _, _, err := universalDeserializer.Decode(admissionReview.Request.Object.Raw, nil, &pvc); err != nil {
+		log.Errorf("Decode PVC in request failed: %s\n", err.Error())
+		return c.JSON(http.StatusBadRequest, "Decode PVC error")
+	} else {
+		if val, ok := pvc.Annotations[m.config.Annotation]; ok {
+			log.Infof("Found annotation [%s=%s], SKIP mutation.", m.config.Annotation, val)
+			return c.JSON(http.StatusOK, reviewResponse)
+		}
+	}
+
+	// Get storageclss name from MutantCSI
 	sc := m.mutant.(*MutantCSI).StorageClass
 	weightedStorageClasses := m.k8s.listWeightedStorageClass(sc)
 
@@ -83,13 +99,13 @@ func (m *MutantWebhook) mutateHandler(c echo.Context) error {
 		reviewResponse.Response = defaultResponse
 	} else {
 		selected := WeightedRandomSelect(weightedStorageClasses)
-		log.Infof("Selected StorageClass: %s\n", selected.Value)
+		log.Infof("SELECTED STORAGECLASS: %s\n", selected.Value)
 		response, err := m.mutant.Mutate(*admissionReview.Request, selected.Value)
 		if err != nil {
-			reviewResponse.Response = defaultResponse
 			log.Errorf("Mutate error: %s\n", err.Error())
+			reviewResponse.Response = defaultResponse
 		} else {
-			// Fill normal mutation
+			// Fill Mutation
 			reviewResponse.Response = &response
 		}
 	}
@@ -101,7 +117,8 @@ func (m *MutantWebhook) mutateHandler(c echo.Context) error {
 }
 
 func (m *MutantWebhook) debugHandler(c echo.Context) error {
-	// items := m.k8s.listWeightedStorageClass("nfs.csi.k8s.io")
+	items := m.k8s.listWeightedStorageClass("nfs.csi.k8s.io")
+	fmt.Println(items)
 	// selected := WeightedRandomSelect(items)
 	// log.Infof("Select storage class: %s\n", selected.Value)
 
@@ -113,7 +130,6 @@ func (m *MutantWebhook) debugHandler(c echo.Context) error {
 }
 
 func NewMutantWebhook(mutant Mutant, config MutantConfig) (*MutantWebhook, error) {
-	mutantConfig = config
 
 	k8sWorker, err := NewK8SWorker(config)
 	if err != nil {

@@ -20,4 +20,4 @@ go.work
 
 # Ignore tmp dir created by air
 tmp
-ninja
+mt

@@ -15,17 +15,22 @@ func init() {
 	if err := env.Parse(&config); err != nil {
 		log.Error(err.Error())
 	}
-	log.Debugf("%+v\n", config)
+	log.Infof("%+v\n", config)
 
 	// Init Logrus, default to INFO
 	if config.Production {
-		log.SetFormatter(&log.JSONFormatter{})
+		log.SetFormatter(&log.TextFormatter{
+			FullTimestamp:   true,
+			TimestampFormat: "2006-01-02 15:04:05.00000",
+		})
+		// log.SetFormatter(&log.JSONFormatter{})
+		log.SetReportCaller(false)
 	} else {
 		log.SetFormatter(&log.TextFormatter{
 			FullTimestamp:   true,
 			TimestampFormat: "2006-01-02 15:04:05.00000",
 		})
-
+		log.SetReportCaller(true)
 	}
 	// log.SetFormatter(&log.JSONFormatter{})
 	logLvl, err := log.ParseLevel(config.LogLevel)
@@ -34,7 +39,6 @@ func init() {
 		logLvl = log.DebugLevel
 	}
 	log.SetLevel(logLvl)
-	log.SetReportCaller(true)
 }
 
 // Starts the webserver and serves the mutate function.

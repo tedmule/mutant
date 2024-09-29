@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -36,8 +37,19 @@ func initK8SClient(mode string) (*kubernetes.Clientset, error) {
 			log.Fatalf("Error building Kubernetes client: %s\n", err.Error())
 		}
 		return client, nil
-
 	}
+	if mode == "incluster" {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			log.Fatalf("Error building in cluster config: %s\n", err.Error())
+		}
+		client, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			log.Fatalf("Error building Kubernetes client: %s\n", err.Error())
+		}
+		return client, nil
+	}
+
 	return client, nil
 }
 
@@ -56,6 +68,7 @@ func (k8s *k8sWorker) listWeightedStorageClass(storageclass string) []WeightedIt
 		if sc.Provisioner == storageclass {
 			item.Value = sc.Name
 			weight := sc.Parameters["weight"]
+			// Only append storageclass with "weight" parameter.
 			if len(weight) > 0 {
 				num, err := strconv.ParseInt(weight, 10, 64)
 				if err != nil {
@@ -63,10 +76,8 @@ func (k8s *k8sWorker) listWeightedStorageClass(storageclass string) []WeightedIt
 				} else {
 					item.Weight = int(num)
 				}
-			} else {
-				item.Weight = 1
+				w = append(w, item)
 			}
-			w = append(w, item)
 		}
 	}
 	log.Infof("%+v\n", w)

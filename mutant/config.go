@@ -8,8 +8,9 @@ type MutantConfig struct {
 	// 	- kubeconfig: use ~/.kube/config
 	// 	- sa		: run in kubernetes, use service account
 	// 	- token		: use token
-	Mode   string `env:"MUTANT_MODE" envDefault:"outofcluster"`
-	Listen string `env:"MUTANT_LISTEN" envDefault:":8443"`
+	Mode       string `env:"MUTANT_MODE" envDefault:"outofcluster"`
+	Listen     string `env:"MUTANT_LISTEN" envDefault:":8443"`
+	Annotation string `env:"MUTANT_ANNOTATION" envDefault:"mutant"`
 	// Length        int    `env:"MUTANT_JABBER_WORD" envDefault:"2"`
 	// Name          string `env:"MUTANT_NAME" envDefault:"default"`
 	// Count         int    `env:"MUTANT_COUNT" envDefault:"1"`
